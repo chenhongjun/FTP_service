@@ -1,2 +1,2 @@
-ftp : main.cpp
-	g++ -o ftp main.cpp ../sysutil.cpp
+ftp : ftp.cpp
+	g++ -o ftp ftp.cpp ../sysutil.cpp
