@@ -2,10 +2,13 @@
 #include "sysutil.h"
 #include "str.h"
 #include "ftpcodes.h"
+#include "tunable.h"
+
 void ftp_reply(int ctrl_fd, int status, const char* text);//回应函数
 void ftp_lreply(int ctrl_fd, int status, const char* text);//回应函数
+int get_transfer_fd(session_t* psess);//获得data_fd
 
-int list_common(void);
+int list_common(session_t* psess);//文件列表
 
 struct ftpcmd_t {
 	const char* cmd;
@@ -50,7 +53,7 @@ static void do_pass(session_t* psess)//cmd = PASS
 		return;
 	}
 	
-	setegid(pw->pw_gid);
+	setegid(pw->pw_gid);//登录成功修改当前用户和用户组
 	seteuid(pw->pw_uid);
 	chdir(pw->pw_dir);//修改进程路径
 	ftp_reply(psess->ctrl_fd, FTP_LOGINOK, "Login successful.");//登录成功
@@ -69,7 +72,23 @@ static void do_quit(session_t* psess)
 }
 static void do_port(session_t* psess)
 {
-	cout << "OO" << endl;
+	//PORT 1,50,190,100,0,21
+	unsigned int v[6];
+	sscanf(psess->arg, "%u,%u,%u,%u,%u,%u", &v[2], &v[3], &v[4], &v[5], &v[0], &v[1]);
+	psess->port_addr = (struct sockaddr_in*)malloc(sizeof(struct sockaddr_in));
+	bzero(psess->port_addr, sizeof(struct sockaddr));
+	psess->port_addr->sin_family = AF_INET;
+	unsigned char* p = (unsigned char*) psess->port_addr->sin_port;
+	p[0] = v[0];//大端(网络)字节序存法
+	p[1] = v[1];
+	p = (unsigned char*)psess->port_addr->sin_addr.s_addr;
+	p[0] = v[2];
+	p[1] = v[3];
+	p[2] = v[4];
+	p[3] = v[5];
+
+	ftp_reply(psess->ctrl_fd, FTP_PORTOK, "PORT command successful. Consider using PASV.");
+
 }
 static void do_pasv(session_t* psess)
 {
@@ -114,7 +133,18 @@ static void do_appe(session_t* psess)
 }
 static void do_list(session_t* psess)
 {
-	cout << "OO" << endl;
+	//创建数据链接
+	if (get_transfer_fd(psess))
+		return;
+	//150
+	ftp_reply(psess->ctrl_fd, FTP_DATACONN, "Here comes the directory listing.");
+	
+	//传输列表
+	list_common(psess);
+	//关闭数据套接字
+	close(psess->data_fd);
+	//226
+	ftp_reply(psess->ctrl_fd, FTP_TRANSFEROK, "Directory send OK.");
 }
 static void do_nlst(session_t* psess)
 {
@@ -309,7 +339,7 @@ void ftp_lreply(int ctrl_fd, int status, const char* text)//回应函数
 }
 
 
-int list_common(void)
+int list_common(session_t* psess)
 {
 	DIR* dir = opendir(".");
 	if (dir == NULL)
@@ -409,8 +439,51 @@ int list_common(void)
 		else 	
 			off += sprintf(buf+off, "%s\r\n", dt->d_name);//非符号链接文件名
 		
-		cout << buf << endl;
+		//cout << buf << endl;
+		writen(psess->data_fd, buf, strlen(buf));
 	}
 	closedir(dir);
+	return 1;
+}
+
+int port_active(session_t* psess)
+{
+	if (psess->port_addr)
+	{
+		return 1;
+	}
+	return 0;
+}
+int pasv_active(session_t* psess)
+{
+	return 0;
+}
+
+
+int get_transfer_fd(session_t* psess)
+{
+	//检测是否收到PORT或者PASV命令
+	if (!port_active(psess) && !pasv_active(psess))
+	{
+		return 0;
+	}
+
+	if (port_active(psess))
+	{//主动模式,服务器主动去连接客户端
+		int fd = tcp_client(0);//20端口
+		if (connect_timeout(fd, psess->port_addr, tunable_connect_timeout) < 0)
+		{
+			close(fd);
+			return 0;
+		}
+		psess->data_fd = fd;
+		
+	}
+	
+	if (psess->port_addr)
+	{
+		free(psess->port_addr);
+		psess->port_addr = NULL;
+	}
 	return 1;
 }

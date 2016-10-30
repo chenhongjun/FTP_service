@@ -5,6 +5,5 @@
 
 void handle_child(session_t* psess);
 
-int list_common(void);
 
 #endif /*_FTP_PROTO_H_*/

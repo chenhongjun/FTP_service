@@ -23,5 +23,6 @@ ssize_t readline(int sockfd, void* buf, size_t maxline);//读到'\n'时返回
 void send_fd(int sock_fd, int fd);//发送文件描述符
 int recv_fd(int sock_fd, int fd);//接收文件描述符
 
+int tcp_client(unsigned short port);//创建套接字并绑定指定端口号
 
 #endif/*_SYS_UTIL_H_*/

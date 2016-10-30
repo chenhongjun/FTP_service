@@ -1,11 +1,12 @@
-#include "sysutil.h"
-#include "session.h"
-#include "str.h"
+
 #include "tunable.h"
+#include "sysutil.h"
 #include "parseconf.h"
-
-
+#include "str.h"
+#include "session.h"
 #include "ftpproto.h"
+
+
 int main()
 {
 	//配置文件模块测试代码
@@ -25,7 +26,7 @@ int main()
 	cout << tunable_download_max_rate << endl;
 	cout << tunable_listen_address << endl;
 	//*/
-	list_common();
+	//list_common();
 	if (getuid() != 0)//只能由root用户启动
 	{
 		fprintf(stderr, "miniftpd: must be started as root\n");
@@ -35,6 +36,8 @@ int main()
 	session_t sess = {//会话结构体，用于通信
 		//控制连接
 		-1, -1, "", "", "",
+		//数据连接
+		NULL, -1,
 		//父子进程通信
 		-1, -1,
 		//FTP协议状态

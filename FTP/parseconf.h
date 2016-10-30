@@ -1,6 +1,5 @@
 #ifndef _PARSE_CONF_H_//配置文件解析模块
 #define _PARSE_CONF_H_
-
 void parseconf_load_file(const char* path);
 void parseconf_load_setting(const char* setting);
 

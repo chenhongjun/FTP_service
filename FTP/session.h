@@ -9,12 +9,15 @@ typedef struct session {
 	char cmdline[MAX_COMMAND_LINE];
 	char cmd[MAX_COMMAND];
 	char arg[MAX_ARG];
+	//数据连接
+	struct sockaddr_in* port_addr;
+	int data_fd;
 	//父子进程通信
 	int parent_fd;
 	int child_fd;
 	//FTP协议状态
 	int is_ascii;
-}session_t;
+} session_t;
 
 void begin_session(session_t* psess);
 
