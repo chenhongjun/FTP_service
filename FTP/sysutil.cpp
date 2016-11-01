@@ -43,7 +43,7 @@ int tcp_server(const char* host, unsigned short port)
 	servaddr.sin_family = AF_INET;
 	if (host != NULL)
 	{
-		if (inet_aton(host, &servaddr.sin_addr) == 0)
+		if (inet_aton(host, &servaddr.sin_addr) == 0)//host为IP地址
 		{//host为主机名
 			struct hostent *hp;
 			if ((hp = gethostbyname(host)) == NULL)

@@ -6,6 +6,8 @@
 
 void ftp_reply(int ctrl_fd, int status, const char* text);//回应函数
 void ftp_lreply(int ctrl_fd, int status, const char* text);//回应函数
+int port_active(session_t* psess);//主动模式是否被激活
+int pasv_active(session_t* psess);//被动模式被激活
 int get_transfer_fd(session_t* psess);//获得data_fd
 
 int list_common(session_t* psess);//文件列表
@@ -39,7 +41,6 @@ static void do_pass(session_t* psess)//cmd = PASS
 	struct spwd* sp = getspnam(pw->pw_name);//获取用户的影子文件信息
 	if (sp == NULL)
 	{
-		cout << "2" << endl;
 		ftp_reply(psess->ctrl_fd, FTP_LOGINERR, "Login incorrect.");
 		return;
 	}
@@ -48,7 +49,6 @@ static void do_pass(session_t* psess)//cmd = PASS
 	char* encrypted_pass = crypt(psess->arg, sp->sp_pwdp);	
 	if (strcmp(encrypted_pass, sp->sp_pwdp) != 0)//如果密码错误
 	{
-		cout << "3" << endl;
 		ftp_reply(psess->ctrl_fd, FTP_LOGINERR, "Login incorrect.");
 		return;
 	}
@@ -86,13 +86,27 @@ static void do_port(session_t* psess)
 	p[1] = v[3];
 	p[2] = v[4];
 	p[3] = v[5];
-
+	
 	ftp_reply(psess->ctrl_fd, FTP_PORTOK, "PORT command successful. Consider using PASV.");
 
 }
 static void do_pasv(session_t* psess)
 {
-	cout << "OO" << endl;
+	char ip[16] = {0};
+	getlocalip(ip);
+	psess->pasv_listen_fd = tcp_server(ip, 0);//创建套接口20
+	struct sockaddr_in addr;
+	socklen_t addrlen = sizeof(addr);
+	if (getsockname(psess->pasv_listen_fd, (struct sockaddr*)&addr, &addrlen) < 0)//获得新套接字信息
+	{
+		ERR_EXIT("getsockname");
+	}
+	unsigned short port = ntohs(addr.sin_port);//端口号存入port
+	unsigned int v[4];//ip地址存入v
+	sscanf(ip, "%u.%u.%u.%u", &v[0], &v[1], &v[2], &v[3]);
+	char text[1024] = {0};
+	sprintf(text, "Entering Passive Mode (%u,%u,%u,%u,%u,%u).", v[0], v[1], v[2], v[3], port>>8, port&0xFF);
+	ftp_reply(psess->ctrl_fd, FTP_PASVOK, text);
 }
 static void do_type(session_t* psess)
 {
@@ -446,16 +460,31 @@ int list_common(session_t* psess)
 	return 1;
 }
 
-int port_active(session_t* psess)
+int port_active(session_t* psess)//主动模式是否被激活
 {
 	if (psess->port_addr)
 	{
+		if (pasv_active(psess))
+		{
+			cerr << "botn port an pasv are active.";
+			exit(EXIT_FAILURE);
+		}
 		return 1;
 	}
 	return 0;
 }
-int pasv_active(session_t* psess)
+//两个都开就是死循环
+int pasv_active(session_t* psess)//被动模式被激活
 {
+	if (psess->pasv_listen_fd != -1)
+	{
+		if (port_active(psess))
+		{
+			cerr << "botn port an pasv are active.";
+			exit(EXIT_FAILURE);
+		}
+		return 1;
+	}
 	return 0;
 }
 
@@ -465,6 +494,7 @@ int get_transfer_fd(session_t* psess)
 	//检测是否收到PORT或者PASV命令
 	if (!port_active(psess) && !pasv_active(psess))
 	{
+		ftp_reply(psess->ctrl_fd, FTP_BADSENDCONN, "Use PORT or PASV first.");
 		return 0;
 	}
 
@@ -479,7 +509,18 @@ int get_transfer_fd(session_t* psess)
 		psess->data_fd = fd;
 		
 	}
-	
+	else if (pasv_active(psess))
+	{
+		int fd = accept_timeout(psess->pasv_listen_fd, NULL, tunable_accept_timeout);
+		close(psess->pasv_listen_fd);
+		psess->pasv_listen_fd = -1;
+		if (fd == -1)
+		{
+			return 0;
+		}
+		psess->data_fd = fd;
+	}
+
 	if (psess->port_addr)
 	{
 		free(psess->port_addr);
