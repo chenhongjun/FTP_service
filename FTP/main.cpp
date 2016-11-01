@@ -44,6 +44,8 @@ int main()
 		0
 	};
 
+	signal(SIGCHLD, SIG_IGN);//忽略僵尸进程状态的回收
+	
 	int listenfd = tcp_server(NULL, 21);
 	int conn;
 	pid_t pid;

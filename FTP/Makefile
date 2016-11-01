@@ -2,8 +2,8 @@
 CC=g++
 CFLAGS=-Wall -g
 BIN=miniftpd
-OBJS=main.o sysutil.o session.o privparent.o ftpproto.o str.o tunable.o parseconf.o
-HEAD=sysutil.h session.h privparent.h ftpproto.h str.h tunable.h parseconf.h
+OBJS=main.o sysutil.o session.o privparent.o ftpproto.o str.o tunable.o parseconf.o privsock.o
+HEAD=sysutil.h session.h privparent.h ftpproto.h str.h tunable.h parseconf.h privsock.h
 LIBS=-lcrypt
 
 $(BIN) : $(OBJS) $(HEAD)

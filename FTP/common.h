@@ -14,6 +14,7 @@
 #include <pwd.h>
 #include <shadow.h>
 #include <dirent.h>
+#include <signal.h>
 //#include <crypt.h>
 
 /*c stand head file*/

@@ -306,6 +306,7 @@ ssize_t readline(int sockfd, void* buf, size_t maxline)//只能用于套接口
 			if (bufp[i] == '\n')
 			{
 				ret = readn(sockfd, bufp, i+1);
+				bufp[ret] = '\0';
 				if (ret != i+1)
 					exit(EXIT_FAILURE);
 				return ret;
