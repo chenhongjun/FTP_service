@@ -354,7 +354,7 @@ void send_fd(int sock_fd, int fd)//发送文件描述符
 		ERR_EXIT("sendmsg");
 }
 
-int recv_fd(int sock_fd, int fd)//接收文件描述符
+int recv_fd(int sock_fd)//接收文件描述符
 {
 	int ret;
 	struct msghdr msg;
