@@ -88,7 +88,7 @@ static void do_port(session_t* psess)
 	p[3] = v[5];
 	
 	ftp_reply(psess->ctrl_fd, FTP_PORTOK, "PORT command successful. Consider using PASV.");
-
+	
 }
 static void do_pasv(session_t* psess)
 {

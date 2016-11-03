@@ -57,6 +57,8 @@ char priv_sock_get_cmd(int fd)
 {
 	char res;
 	int ret = readn(fd, &res, sizeof(res));
+	if (ret == 0)
+		exit(EXIT_SUCCESS);
 	if (ret != sizeof(res))
 	{
 		fprintf(stderr, "priv_sock_get_cmd\n");

@@ -250,7 +250,7 @@ ssize_t readn(int fd, void* buf, size_t count)
 			return -1;
 		}
 		else if (nread == 0)
-			return count-nleft;
+			return 0;
 		
 		bufp += nread;
 		nleft -= nread;

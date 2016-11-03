@@ -1,5 +1,5 @@
 #include "privparent.h"
-
+#include "privsock.h"
 static void privop_pasv_get_data_sock(session_t* psess);
 static void privop_pasv_active(session_t* psess);
 static void privop_pasv_listen(session_t* psess);
@@ -24,12 +24,16 @@ void handle_parent(session_t* psess)
 		switch (cmd)
 		{
 			case PRIV_SOCK_GET_DATA_SOCK:
+				privop_pasv_get_data_sock(psess);
 				break;
 			case PRIV_SOCK_PASV_ACTIVE:
+				privop_pasv_active(psess);
 				break;
 			case PRIV_SOCK_PASV_LISTEN:
+				privop_pasv_listen(psess);
 				break;
 			case PRIV_SOCK_PASV_ACCEPT:
+				privop_pasv_accept(psess);
 				break;
 		}
 	}
