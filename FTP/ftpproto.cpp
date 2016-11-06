@@ -3,12 +3,13 @@
 #include "str.h"
 #include "ftpcodes.h"
 #include "tunable.h"
-
+#include "privsock.h"
 void ftp_reply(int ctrl_fd, int status, const char* text);//回应函数
 void ftp_lreply(int ctrl_fd, int status, const char* text);//回应函数
 int port_active(session_t* psess);//主动模式是否被激活
 int pasv_active(session_t* psess);//被动模式被激活
 int get_transfer_fd(session_t* psess);//获得data_fd
+int get_port_fd(session_t* psess);//向父进程接收套接字
 
 int list_common(session_t* psess);//文件列表
 
@@ -488,9 +489,28 @@ int pasv_active(session_t* psess)//被动模式被激活
 	return 0;
 }
 
+int get_port_fd(session_t* psess)//向父进程接收套接字
+{
+		priv_sock_send_int(psess->child_fd, PRIV_SOCK_GET_DATA_SOCK);
+		unsigned short port = ntohs(psess->port_addr->sin_port);
+		char* ip = inet_ntoa(psess->port_addr->sin_addr);
+		priv_sock_send_int(psess->child_fd, (int)port);
+		char buf[16] = {0};
+		strcpy(buf, ip);
+		priv_sock_send_buf(psess->child_fd, buf, strlen(buf));
+		int ret = priv_sock_get_result(psess->child_fd);
+		if (ret == PRIV_SOCK_RESULT_BAD)
+			return 0;
+		else if (ret == PRIV_SOCK_RESULT_OK)
+		{
+			psess->data_fd = priv_sock_recv_fd(psess->child_fd);
+		}
+		return 1;
+}
 
 int get_transfer_fd(session_t* psess)
 {
+	int ret = 1;
 	//检测是否收到PORT或者PASV命令
 	if (!port_active(psess) && !pasv_active(psess))
 	{
@@ -500,14 +520,14 @@ int get_transfer_fd(session_t* psess)
 
 	if (port_active(psess))
 	{//主动模式,服务器主动去连接客户端
-		int fd = tcp_client(0);//20端口
+		/*int fd = tcp_client(0);//20端口
 		if (connect_timeout(fd, psess->port_addr, tunable_connect_timeout) < 0)
 		{
 			close(fd);
 			return 0;
 		}
-		psess->data_fd = fd;
-		
+		psess->data_fd = fd;*/
+		ret = get_port_fd(psess);
 	}
 	else if (pasv_active(psess))
 	{
@@ -526,5 +546,5 @@ int get_transfer_fd(session_t* psess)
 		free(psess->port_addr);
 		psess->port_addr = NULL;
 	}
-	return 1;
+	return ret;
 }

@@ -15,6 +15,9 @@
 #include <shadow.h>
 #include <dirent.h>
 #include <signal.h>
+//#undef _POSIX_SOURCE
+#include <linux/capability.h>
+#include <sys/syscall.h>
 //#include <crypt.h>
 
 /*c stand head file*/
