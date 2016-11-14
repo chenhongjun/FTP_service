@@ -17,8 +17,8 @@ void priv_sock_close(session_t* psess);//关闭进程间通信通道
 void priv_sock_set_parent_context(session_t* psess);//设置父进程环境
 void priv_sock_set_child_context(session_t* psess);//设置子进程环境
 
-void priv_sock_send_cmd(int fd, char cmd);//服务进程(发送)-->>nobody
-char priv_sock_get_cmd(int fd);//服务进程-->>nobody(接收)
+void priv_sock_send_cmd(int fd, int cmd);//服务进程(发送)-->>nobody
+int priv_sock_get_cmd(int fd);//服务进程-->>nobody(接收)
 
 void priv_sock_send_result(int fd, char res);//nobody(发送)-->>服务进程
 char priv_sock_get_result(int fd);//nobody-->>服务进程(接收)

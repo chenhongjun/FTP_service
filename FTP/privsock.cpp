@@ -44,7 +44,7 @@ void priv_sock_set_child_context(session_t* psess)
 }
 
 
-void priv_sock_send_cmd(int fd, char cmd)
+void priv_sock_send_cmd(int fd, int cmd)
 {
 	int ret = writen(fd, &cmd, sizeof(cmd));
 	if (ret != sizeof(cmd))
@@ -53,9 +53,9 @@ void priv_sock_send_cmd(int fd, char cmd)
 		exit(EXIT_FAILURE);
 	}
 }
-char priv_sock_get_cmd(int fd)
+int priv_sock_get_cmd(int fd)
 {
-	char res;
+	int res;
 	int ret = readn(fd, &res, sizeof(res));
 	if (ret == 0)
 		exit(EXIT_SUCCESS);

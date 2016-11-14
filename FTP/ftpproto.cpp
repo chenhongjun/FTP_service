@@ -10,8 +10,12 @@ int port_active(session_t* psess);//主动模式是否被激活
 int pasv_active(session_t* psess);//被动模式被激活
 int get_transfer_fd(session_t* psess);//获得data_fd
 int get_port_fd(session_t* psess);//向父进程接收套接字
+int get_pasv_fd(session_t* psess);//
+const char* statbuf_get_perms(struct stat* sbuf);//文件列表访问属性
+const char* statbuf_get_date(struct stat* sbuf);//文件列表时间属性
 
-int list_common(session_t* psess);//文件列表
+
+int list_common(session_t* psess, int detail);//文件列表
 
 struct ftpcmd_t {
 	const char* cmd;
@@ -24,7 +28,7 @@ static void do_user(session_t* psess)//cmd = USER
 	if (pw == NULL)//用户不存在
 	{
 		ftp_reply(psess->ctrl_fd, FTP_LOGINERR, "Login incorrect.");
-		return;
+		exit(0);
 	}
 	
 	psess->uid = pw->pw_uid;//用户存在
@@ -51,7 +55,7 @@ static void do_pass(session_t* psess)//cmd = PASS
 	if (strcmp(encrypted_pass, sp->sp_pwdp) != 0)//如果密码错误
 	{
 		ftp_reply(psess->ctrl_fd, FTP_LOGINERR, "Login incorrect.");
-		return;
+		exit(0);
 	}
 	
 	setegid(pw->pw_gid);//登录成功修改当前用户和用户组
@@ -80,7 +84,7 @@ static void do_port(session_t* psess)
 	bzero(psess->port_addr, sizeof(struct sockaddr));
 	psess->port_addr->sin_family = AF_INET;
 	unsigned char* p = (unsigned char*) psess->port_addr->sin_port;
-	p[0] = v[0];//大端(网络)字节序存法
+	p[0] = v[0];//大端(网络)字节序存法存入psess->port_addr
 	p[1] = v[1];
 	p = (unsigned char*)psess->port_addr->sin_addr.s_addr;
 	p[0] = v[2];
@@ -95,19 +99,24 @@ static void do_pasv(session_t* psess)
 {
 	char ip[16] = {0};
 	getlocalip(ip);
-	psess->pasv_listen_fd = tcp_server(ip, 0);//创建套接口20
+	/*psess->pasv_listen_fd = tcp_server(ip, 20);//创建套接口20
 	struct sockaddr_in addr;
 	socklen_t addrlen = sizeof(addr);
 	if (getsockname(psess->pasv_listen_fd, (struct sockaddr*)&addr, &addrlen) < 0)//获得新套接字信息
 	{
 		ERR_EXIT("getsockname");
-	}
-	unsigned short port = ntohs(addr.sin_port);//端口号存入port
+	}*/
+
+	priv_sock_send_cmd(psess->child_fd, PRIV_SOCK_PASV_LISTEN);
+	unsigned short port = priv_sock_get_int(psess->child_fd);
+	
+	
 	unsigned int v[4];//ip地址存入v
 	sscanf(ip, "%u.%u.%u.%u", &v[0], &v[1], &v[2], &v[3]);
 	char text[1024] = {0};
 	sprintf(text, "Entering Passive Mode (%u,%u,%u,%u,%u,%u).", v[0], v[1], v[2], v[3], port>>8, port&0xFF);
-	ftp_reply(psess->ctrl_fd, FTP_PASVOK, text);
+	ftp_reply(psess->ctrl_fd, FTP_PASVOK, text);//通知客户端自己已经准备好
+	//free(psess->port_addr);psess->port_addr = -1;
 }
 static void do_type(session_t* psess)
 {
@@ -148,22 +157,29 @@ static void do_appe(session_t* psess)
 }
 static void do_list(session_t* psess)
 {
-	//创建数据链接
+	//根据之前的主被动模式 创建数据链接
 	if (get_transfer_fd(psess))
 		return;
 	//150
 	ftp_reply(psess->ctrl_fd, FTP_DATACONN, "Here comes the directory listing.");
 	
 	//传输列表
-	list_common(psess);
+	list_common(psess, 1);//详细清单
 	//关闭数据套接字
 	close(psess->data_fd);
+	psess->data_fd = -1;
 	//226
 	ftp_reply(psess->ctrl_fd, FTP_TRANSFEROK, "Directory send OK.");
 }
 static void do_nlst(session_t* psess)
 {
-	cout << "OO" << endl;
+	if (get_transfer_fd(psess) == 0)
+		return;
+	ftp_reply(psess->ctrl_fd, FTP_DATACONN, "Here comes the directory listing.");
+	list_common(psess, 0);//简略清单
+	close(psess->data_fd);
+	psess->data_fd = -1;
+	ftp_reply(psess->ctrl_fd, FTP_TRANSFEROK, "Directory send OK.");
 }
 static void do_rest(session_t* psess)
 {
@@ -307,11 +323,11 @@ void handle_child(session_t* psess)
 		}
 		//去除\r\n
 		str_trim_crlf(psess->cmdline);
-		cout << "cmd text:" << psess->cmdline << endl;
+		//cout << "cmd text:" << psess->cmdline << endl;
 		//解析FTP命令与参数
 		str_split(psess->cmdline, psess->cmd, psess->arg, ' ');
 		str_upper(psess->cmd);//命令改为统一大写
-		cout << psess->cmd << " : " << psess->arg << endl;
+		//cout << psess->cmd << " : " << psess->arg << endl;
 		//处理FTP命令与参数
 		/*if (strcmp(psess->cmd, "USER") == 0)
 		{
@@ -354,7 +370,7 @@ void ftp_lreply(int ctrl_fd, int status, const char* text)//回应函数
 }
 
 
-int list_common(session_t* psess)
+int list_common(session_t* psess, int detail)
 {
 	DIR* dir = opendir(".");
 	if (dir == NULL)
@@ -366,12 +382,164 @@ int list_common(session_t* psess)
 		if (lstat(dt->d_name, &sbuf) < 0)//文件本身信息,如果是软链接文件也是该软链接文件的信息
 			continue;
 		
-		//if (dt->d_name[0] == '.')//过滤隐藏文件
-		//	continue;
+		if (dt->d_name[0] == '.')//过滤隐藏文件
+			continue;
 		
-		char perms[] = "----------";
+		char buf[1024] = {0};
+		int off = 0;
+		if (detail)//长清单list
+		{
+		const char* perms = statbuf_get_perms(&sbuf);
+
+		off = sprintf(buf, "%s ", perms);
+		off += sprintf(buf+off, "%3d %-8d %-8d ", sbuf.st_nlink, sbuf.st_uid, sbuf.st_gid);//硬链接数,所有者ID,所属组ID
+		off += sprintf(buf+off, "%8lu ", sbuf.st_size);//文件大小
+		
+
+		const char* datebuf = statbuf_get_date(&sbuf);
+		off += sprintf(buf+off, "%s ", datebuf);
+
+		
+		if (S_ISLNK(sbuf.st_mode))//是符号(软)链接文件
+		{
+			char tmp[1024+1] = {0};
+			readlink(dt->d_name, tmp, sizeof(tmp));
+			off += sprintf(buf+off, "%s -> %s\r\n", dt->d_name, tmp);
+		}
+		else 	
+			off += sprintf(buf+off, "%s\r\n", dt->d_name);//非符号链接文件名
+		}
+		else//短清单
+		{
+			sprintf(buf+off, "%s", dt->d_name);
+		}
+		
+		//cout << buf << endl;
+		writen(psess->data_fd, buf, strlen(buf));
+	}
+	closedir(dir);
+	return 1;
+}
+
+int port_active(session_t* psess)//主动模式是否被激活
+{
+	if (psess->port_addr)
+	{
+		if (pasv_active(psess))
+		{
+			cerr << "both port an pasv are active.";
+			exit(EXIT_FAILURE);
+		}
+		return 1;
+	}
+	return 0;
+}
+//两个都开就是死循环
+int pasv_active(session_t* psess)//被动模式被激活
+{
+	/*
+	if (psess->pasv_listen_fd != -1)
+	{
+		if (port_active(psess))
+		{
+			cerr << "botn port an pasv are active.";
+			exit(EXIT_FAILURE);
+		}
+		return 1;
+	}
+	//*/
+	priv_sock_send_cmd(psess->child_fd, PRIV_SOCK_PASV_ACTIVE);
+	int active = priv_sock_get_int(psess->child_fd);
+	if (active)
+	{
+		if (port_active(psess))
+		{
+				cerr << "both port an pasv are active.";
+				exit(EXIT_FAILURE);
+		}
+		return 1;
+	}
+	return 0;
+}
+
+int get_port_fd(session_t* psess)//向父进程接收套接字存入psess->data_fd
+{
+		priv_sock_send_cmd(psess->child_fd, PRIV_SOCK_GET_DATA_SOCK);
+		unsigned short port = ntohs(psess->port_addr->sin_port);
+		char* ip = inet_ntoa(psess->port_addr->sin_addr);
+		priv_sock_send_int(psess->child_fd, (int)port);
+		char buf[16] = {0};
+		strcpy(buf, ip);
+		priv_sock_send_buf(psess->child_fd, buf, strlen(buf));
+		int ret = priv_sock_get_result(psess->child_fd);
+		if (ret == PRIV_SOCK_RESULT_BAD)
+			return 0;
+		else if (ret == PRIV_SOCK_RESULT_OK)
+		{
+			psess->data_fd = priv_sock_recv_fd(psess->child_fd);
+		}
+		return 1;
+}
+int get_pasv_fd(session_t* psess)//被动模式创建数据链接
+{
+	priv_sock_send_cmd(psess->child_fd, PRIV_SOCK_PASV_ACCEPT);
+	int res = priv_sock_get_result(psess->child_fd);
+	if (res == PRIV_SOCK_RESULT_BAD)
+		return 0;
+	else if (res == PRIV_SOCK_RESULT_OK)
+	{
+		psess->data_fd = priv_sock_recv_fd(psess->child_fd);
+	}
+		return 1;
+}
+
+int get_transfer_fd(session_t* psess)
+{
+	int ret = 1;
+	//检测是否收到PORT或者PASV命令
+	if (!port_active(psess) && !pasv_active(psess))
+	{
+		ftp_reply(psess->ctrl_fd, FTP_BADSENDCONN, "Use PORT or PASV first.");
+		return 0;
+	}
+
+	if (port_active(psess))
+	{//主动模式,服务器主动去连接客户端
+		/*int fd = tcp_client(0);//20端口
+		if (connect_timeout(fd, psess->port_addr, tunable_connect_timeout) < 0)
+		{
+			close(fd);
+			return 0;
+		}
+		psess->data_fd = fd;*/
+		ret = get_port_fd(psess);
+	}
+	else if (pasv_active(psess))
+	{
+		/*int fd = accept_timeout(psess->pasv_listen_fd, NULL, tunable_accept_timeout);
+		close(psess->pasv_listen_fd);
+		psess->pasv_listen_fd = -1;
+		if (fd == -1)
+		{
+			return 0;
+		}
+		psess->data_fd = fd;*/
+		ret = get_pasv_fd(psess);
+	}
+
+	if (psess->port_addr)
+	{
+		free(psess->port_addr);
+		psess->port_addr = NULL;
+	}
+	return ret;
+}
+
+const char* statbuf_get_perms(struct stat* sbuf)//文件列表属性
+{
+		static char perms[] = "----------";
 		perms[0] = '?';//文件类型
-		mode_t mode = sbuf.st_mode;
+		mode_t mode = sbuf->st_mode;
 		switch (mode & S_IFMT)
 		{
 			case S_IFREG:
@@ -426,125 +594,20 @@ int list_common(session_t* psess)
 		if (mode & S_ISVTX)
 			perms[9] = (perms[9] == 'x' ? 't' : 'T');
 		
-		char buf[1024] = {0};
-		int off = sprintf(buf, "%s ", perms);
-		off += sprintf(buf+off, "%3d %-8d %-8d ", sbuf.st_nlink, sbuf.st_uid, sbuf.st_gid);//硬链接数,所有者ID,所属组ID
-		off += sprintf(buf+off, "%8lu ", sbuf.st_size);//文件大小
-		
+		return perms;
+}
+const char* statbuf_get_date(struct stat* sbuf)//文件列表时间属性
+{
+		static char datebuf[64] = {0};
 		const char* p_date_format = "%b %e %H:%M";
 		struct timeval tv;
 		gettimeofday(&tv, NULL);//获得系统当前时间
 		time_t local_time = tv.tv_sec;
-		if (sbuf.st_mtime > local_time || (local_time - sbuf.st_mtime) > 60*60*24*182)//创建时间大于系统当前时间或创建时间超过半年
+		if (sbuf->st_mtime > local_time || (local_time - sbuf->st_mtime) > 60*60*24*182)//创建时间大于系统当前时间或创建时间超过半年
 		{
 			p_date_format = "%b %e %Y";
 		}
-		char datebuf[64] = {0};
-		struct tm* p_tm = localtime(&sbuf.st_mtime);
+		struct tm* p_tm = localtime(&sbuf->st_mtime);
 		strftime(datebuf, sizeof(datebuf), p_date_format, p_tm);
-		off += sprintf(buf+off, "%s ", datebuf);
-
-		
-		if (S_ISLNK(mode))//是符号(软)链接文件
-		{
-			char tmp[1024+1] = {0};
-			readlink(dt->d_name, tmp, sizeof(tmp));
-			off += sprintf(buf+off, "%s -> %s\r\n", dt->d_name, tmp);
-		}
-		else 	
-			off += sprintf(buf+off, "%s\r\n", dt->d_name);//非符号链接文件名
-		
-		//cout << buf << endl;
-		writen(psess->data_fd, buf, strlen(buf));
-	}
-	closedir(dir);
-	return 1;
-}
-
-int port_active(session_t* psess)//主动模式是否被激活
-{
-	if (psess->port_addr)
-	{
-		if (pasv_active(psess))
-		{
-			cerr << "botn port an pasv are active.";
-			exit(EXIT_FAILURE);
-		}
-		return 1;
-	}
-	return 0;
-}
-//两个都开就是死循环
-int pasv_active(session_t* psess)//被动模式被激活
-{
-	if (psess->pasv_listen_fd != -1)
-	{
-		if (port_active(psess))
-		{
-			cerr << "botn port an pasv are active.";
-			exit(EXIT_FAILURE);
-		}
-		return 1;
-	}
-	return 0;
-}
-
-int get_port_fd(session_t* psess)//向父进程接收套接字
-{
-		priv_sock_send_int(psess->child_fd, PRIV_SOCK_GET_DATA_SOCK);
-		unsigned short port = ntohs(psess->port_addr->sin_port);
-		char* ip = inet_ntoa(psess->port_addr->sin_addr);
-		priv_sock_send_int(psess->child_fd, (int)port);
-		char buf[16] = {0};
-		strcpy(buf, ip);
-		priv_sock_send_buf(psess->child_fd, buf, strlen(buf));
-		int ret = priv_sock_get_result(psess->child_fd);
-		if (ret == PRIV_SOCK_RESULT_BAD)
-			return 0;
-		else if (ret == PRIV_SOCK_RESULT_OK)
-		{
-			psess->data_fd = priv_sock_recv_fd(psess->child_fd);
-		}
-		return 1;
-}
-
-int get_transfer_fd(session_t* psess)
-{
-	int ret = 1;
-	//检测是否收到PORT或者PASV命令
-	if (!port_active(psess) && !pasv_active(psess))
-	{
-		ftp_reply(psess->ctrl_fd, FTP_BADSENDCONN, "Use PORT or PASV first.");
-		return 0;
-	}
-
-	if (port_active(psess))
-	{//主动模式,服务器主动去连接客户端
-		/*int fd = tcp_client(0);//20端口
-		if (connect_timeout(fd, psess->port_addr, tunable_connect_timeout) < 0)
-		{
-			close(fd);
-			return 0;
-		}
-		psess->data_fd = fd;*/
-		ret = get_port_fd(psess);
-	}
-	else if (pasv_active(psess))
-	{
-		int fd = accept_timeout(psess->pasv_listen_fd, NULL, tunable_accept_timeout);
-		close(psess->pasv_listen_fd);
-		psess->pasv_listen_fd = -1;
-		if (fd == -1)
-		{
-			return 0;
-		}
-		psess->data_fd = fd;
-	}
-
-	if (psess->port_addr)
-	{
-		free(psess->port_addr);
-		psess->port_addr = NULL;
-	}
-	return ret;
+		return datebuf;
 }

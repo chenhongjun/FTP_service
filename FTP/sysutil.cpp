@@ -35,9 +35,8 @@ int tcp_client(unsigned short port)
 int tcp_server(const char* host, unsigned short port)
 {
 	int listenfd;
-	if ((listenfd = socket(PF_INET, SOCK_STREAM, 0)) < 0)
+	if ((listenfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
 		ERR_EXIT("socket");
-
 	struct sockaddr_in servaddr;
 	bzero(&servaddr,sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
@@ -52,15 +51,23 @@ int tcp_server(const char* host, unsigned short port)
 		}
 	}
 	else//host为空则绑定本主机所有IP地址
+	{
 		servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	
+	}
 	servaddr.sin_port = htons(port);
+	
+	//inet_aton("127.0.0.1", &servaddr.sin_addr);
 
 	int on = 1;
 	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&on, sizeof(on)) < 0)//设置套接字重复利用
 		ERR_EXIT("setsockopt");
-	if (bind(listenfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) < 0)
+	if (bind(listenfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) == -1)
+	{
+		cerr << listenfd << endl;
+		cerr << ntohs(servaddr.sin_port) << endl;
+		cerr << inet_ntoa(servaddr.sin_addr) << endl;
 		ERR_EXIT("bind");
+	}
 	if (listen(listenfd, SOMAXCONN) < 0)
 		ERR_EXIT("listen");
 	return listenfd;

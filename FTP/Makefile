@@ -10,7 +10,7 @@ $(BIN) : $(OBJS) $(HEAD)
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
 #main.o sysutil.o session.o privparent.o ftpproto.o
 %.o : %.cpp
-	$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -c $< -o $@
 #main.o : main.cpp
 #	$(CC) $(CFLAGS) -c main.cpp -o main.o
 #sysutil.o : sysutil.cpp
@@ -23,4 +23,4 @@ $(BIN) : $(OBJS) $(HEAD)
 #	$(CC) $(CFLAGS) -c ftpproto.cpp -o ftpproto.o
 
 clean:
-	rm -f *.o
+	@rm -f *.o
