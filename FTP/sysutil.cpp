@@ -37,13 +37,16 @@ int tcp_server(const char* host, unsigned short port)
 	int listenfd;
 	if ((listenfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
 		ERR_EXIT("socket");
+
 	struct sockaddr_in servaddr;
 	bzero(&servaddr,sizeof(servaddr));
+	
 	servaddr.sin_family = AF_INET;
-	if (host != NULL)
+	
+	if (host != NULL)//地址不为空
 	{
-		if (inet_aton(host, &servaddr.sin_addr) == 0)//host为IP地址
-		{//host为主机名
+		if (inet_aton(host, &servaddr.sin_addr)/*host为IP地址*/ == 0)
+		{//==0 则host不为IP而为主机名
 			struct hostent *hp;
 			if ((hp = gethostbyname(host)) == NULL)
 				ERR_EXIT("gethostbyname");
@@ -54,6 +57,7 @@ int tcp_server(const char* host, unsigned short port)
 	{
 		servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	}
+
 	servaddr.sin_port = htons(port);
 	
 	//inet_aton("127.0.0.1", &servaddr.sin_addr);

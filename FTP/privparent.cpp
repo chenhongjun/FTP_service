@@ -11,7 +11,7 @@ static void minimize_privilege();//对用户权限的修改封装使之权限最
 
 void handle_parent(session_t* psess)
 {
-	minimize_privilege();//修改用户为nobody及权限最小化
+	//minimize_privilege();//修改用户为nobody及权限最小化
 	
 	/*int ff = socket(AF_INET, SOCK_STREAM, 0);
 	if (ff > 0)
@@ -95,15 +95,17 @@ static void privop_pasv_listen(session_t* psess)
 {
 	char ip[16] = {0};
 	getlocalip(ip);
-	psess->pasv_listen_fd = tcp_server(ip, 20);//创建套接口20
+	psess->pasv_listen_fd = tcp_server(NULL, 20);//在本地创建套接口20并监听
 	struct sockaddr_in addr;
 	socklen_t addrlen = sizeof(addr);
+	bzero(&addr, addrlen);
+	
 	if (getsockname(psess->pasv_listen_fd, (struct sockaddr*)&addr, &addrlen) < 0)//获得新套接字信息
 	{
 		ERR_EXIT("getsockname");
 	}
 	unsigned short port = ntohs(addr.sin_port);//端口号存入port
-	priv_sock_send_int(psess->parent_fd, (int)port);//发送给客户端处理进程
+	priv_sock_send_int(psess->parent_fd, (int)port);//发送给子进程，由子进程通知客户端链接过来
 	
 }
 static void privop_pasv_accept(session_t* psess)
@@ -114,15 +116,18 @@ static void privop_pasv_accept(session_t* psess)
 	if (fd == -1)
 	{
 		priv_sock_send_result(psess->parent_fd, PRIV_SOCK_RESULT_BAD);
+		cout << "send result is bad." << endl;
 		return;
 	}
 	priv_sock_send_result(psess->parent_fd, PRIV_SOCK_RESULT_OK);
+	
 	priv_sock_send_fd(psess->parent_fd, fd);
 	close(fd);
 }
 
 static void minimize_privilege()//对用户权限的修改封装使之权限最小化
 {
+	
 	struct passwd* pw = getpwnam("nobody");//获得nobody用户的信息
 	if (pw == NULL)
 		return;
@@ -144,7 +149,9 @@ static void minimize_privilege()//对用户权限的修改封装使之权限最�
 	cap_data.effective = cap_data.permitted = cap_mask;
 	cap_data.inheritable = 0;//exec时不继承
 
-	cout << capset(&cap_header, &cap_data) << endl;//增加用户权限,头文件中没有定义该接口,所以通过syscall函数调用系统调用实现该接口
+	if (capset(&cap_header, &cap_data) == -1)//增加用户权限,头文件中没有定义该接口,所以通过syscall函数调用系统调用实现该接口
+		ERR_EXIT("syscall hdrp");
+	
 }
 static int capset(struct __user_cap_header_struct* hdrp, struct __user_cap_data_struct* datap)//增加用户权限
 {

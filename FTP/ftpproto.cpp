@@ -63,9 +63,10 @@ static void do_pass(session_t* psess)//cmd = PASS
 	chdir(pw->pw_dir);//修改进程路径
 	ftp_reply(psess->ctrl_fd, FTP_LOGINOK, "Login successful.");//登录成功
 }
-static void do_cwd(session_t* psess)
+static void do_cwd(session_t* psess)//改变当前路径
 {
-	cout << "OO" << endl;
+	chdir(psess->arg);
+	ftp_reply(psess->ctrl_fd, FTP_CWDOK, "Directory successfully changed.");
 }
 static void do_cdup(session_t* psess)
 {
@@ -98,7 +99,8 @@ static void do_port(session_t* psess)
 static void do_pasv(session_t* psess)
 {
 	char ip[16] = {0};
-	getlocalip(ip);
+	//getlocalip(ip);
+
 	/*psess->pasv_listen_fd = tcp_server(ip, 20);//创建套接口20
 	struct sockaddr_in addr;
 	socklen_t addrlen = sizeof(addr);
@@ -108,13 +110,14 @@ static void do_pasv(session_t* psess)
 	}*/
 
 	priv_sock_send_cmd(psess->child_fd, PRIV_SOCK_PASV_LISTEN);
-	unsigned short port = priv_sock_get_int(psess->child_fd);
-	
+	unsigned short port = (unsigned short)priv_sock_get_int(psess->child_fd);
+	cout << "port=" << port << endl;
 	
 	unsigned int v[4];//ip地址存入v
-	sscanf(ip, "%u.%u.%u.%u", &v[0], &v[1], &v[2], &v[3]);
+	sscanf("0.0.0.0", "%u.%u.%u.%u", &v[0], &v[1], &v[2], &v[3]);
 	char text[1024] = {0};
 	sprintf(text, "Entering Passive Mode (%u,%u,%u,%u,%u,%u).", v[0], v[1], v[2], v[3], port>>8, port&0xFF);
+	cout << text << endl;
 	ftp_reply(psess->ctrl_fd, FTP_PASVOK, text);//通知客户端自己已经准备好
 	//free(psess->port_addr);psess->port_addr = -1;
 }
@@ -525,6 +528,7 @@ int get_transfer_fd(session_t* psess)
 		}
 		psess->data_fd = fd;*/
 		ret = get_pasv_fd(psess);
+		cout << "ret = " << ret << endl;
 	}
 
 	if (psess->port_addr)

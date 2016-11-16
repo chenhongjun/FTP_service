@@ -103,6 +103,11 @@ int priv_sock_get_int(int fd)//接收一个整数
 	int ret = readn(fd, &the_int, sizeof(the_int));
 	if (ret != sizeof(the_int))
 	{
+		if (ret == 0)
+		{
+			cerr << "he close!" << endl;
+			exit(EXIT_FAILURE);
+		}
 		fprintf(stderr, "priv_sock_get_int\n");
 		exit(EXIT_FAILURE);
 	}
