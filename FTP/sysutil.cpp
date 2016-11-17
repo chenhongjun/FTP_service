@@ -18,7 +18,7 @@ int tcp_client(unsigned short port)
 		localaddr.sin_port = htons(port);
 		char ip[16] = {0};
 		getlocalip(ip);
-		localaddr.sin_addr.s_addr = inet_addr(ip);
+		inet_aton(ip, &localaddr.sin_addr);
 		if (bind(sock, (struct sockaddr*)&localaddr, sizeof(localaddr)) < 0)
 			ERR_EXIT("bind");
 	}
@@ -361,7 +361,7 @@ void send_fd(int sock_fd, int fd)//发送文件描述符
 	vec.iov_base = &sendchar;
 	vec.iov_len = sizeof(sendchar);
 	ret = sendmsg(sock_fd, &msg, 0);
-	if (ret == 1)
+	if (ret == -1)
 		ERR_EXIT("sendmsg");
 }
 
@@ -388,7 +388,7 @@ int recv_fd(int sock_fd)//接收文件描述符
 	p_fd = (int*)CMSG_DATA(CMSG_FIRSTHDR(&msg));
 	*p_fd = -1;
 	ret = recvmsg(sock_fd, &msg, 0);
-	if (ret == 1)
+	if (ret == -1)
 		ERR_EXIT("recvmsg");
 
 	p_cmsg = CMSG_FIRSTHDR(&msg);

@@ -161,11 +161,11 @@ static void do_appe(session_t* psess)
 static void do_list(session_t* psess)
 {
 	//根据之前的主被动模式 创建数据链接
-	if (get_transfer_fd(psess))
+	if (!get_transfer_fd(psess))
 		return;
 	//150
 	ftp_reply(psess->ctrl_fd, FTP_DATACONN, "Here comes the directory listing.");
-	
+	cout << "begin list" << endl;
 	//传输列表
 	list_common(psess, 1);//详细清单
 	//关闭数据套接字
@@ -528,7 +528,7 @@ int get_transfer_fd(session_t* psess)
 		}
 		psess->data_fd = fd;*/
 		ret = get_pasv_fd(psess);
-		cout << "ret = " << ret << endl;
+		cout << "fd = " << psess->data_fd << endl;
 	}
 
 	if (psess->port_addr)

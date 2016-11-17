@@ -6,8 +6,8 @@ static void privop_pasv_get_data_sock(session_t* psess);
 static void privop_pasv_active(session_t* psess);
 static void privop_pasv_listen(session_t* psess);
 static void privop_pasv_accept(session_t* psess);
-static int capset(struct __user_cap_header_struct*, struct __user_cap_data_struct*);//增加用户权限
-static void minimize_privilege();//对用户权限的修改封装使之权限最小化
+//int capset(cap_user_header_t hdrp, const cap_user_data_t datap);//增加用户权限
+//static void minimize_privilege();//对用户权限的修改封装使之权限最小化
 
 void handle_parent(session_t* psess)
 {
@@ -124,7 +124,7 @@ static void privop_pasv_accept(session_t* psess)
 	priv_sock_send_fd(psess->parent_fd, fd);
 	close(fd);
 }
-
+/*
 static void minimize_privilege()//对用户权限的修改封装使之权限最小化
 {
 	
@@ -146,14 +146,14 @@ static void minimize_privilege()//对用户权限的修改封装使之权限最�
 
 	__u32 cap_mask = 0;
 	cap_mask |= (1 << CAP_NET_BIND_SERVICE);//绑定<1024端口号的特权
-	cap_data.effective = cap_data.permitted = cap_mask;
+	cap_data.effective = cap_data.permitted = cap_mask;//特权
 	cap_data.inheritable = 0;//exec时不继承
 
 	if (capset(&cap_header, &cap_data) == -1)//增加用户权限,头文件中没有定义该接口,所以通过syscall函数调用系统调用实现该接口
 		ERR_EXIT("syscall hdrp");
 	
 }
-static int capset(struct __user_cap_header_struct* hdrp, struct __user_cap_data_struct* datap)//增加用户权限
+int capset(cap_user_header_t hdrp, const cap_user_data_t datap)//增加用户权限
 {
 	return syscall(__NR_capset, hdrp, datap);
-}
+}*/
