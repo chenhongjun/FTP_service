@@ -58,6 +58,7 @@ static void do_pass(session_t* psess)//cmd = PASS
 		exit(0);
 	}
 	
+	umask(tunable_local_umask);//设置掩码
 	setegid(pw->pw_gid);//登录成功修改当前用户和用户组
 	seteuid(pw->pw_uid);
 	chdir(pw->pw_dir);//修改进程路径
@@ -65,12 +66,21 @@ static void do_pass(session_t* psess)//cmd = PASS
 }
 static void do_cwd(session_t* psess)//改变当前路径
 {
-	chdir(psess->arg);
+	if (chdir(psess->arg) < 0)
+	{
+		ftp_reply(psess->ctrl_fd, FTP_FILEFAIL, "Failed to change directory.");
+		return;
+	}
 	ftp_reply(psess->ctrl_fd, FTP_CWDOK, "Directory successfully changed.");
 }
-static void do_cdup(session_t* psess)
+static void do_cdup(session_t* psess)//返回上一级目录
 {
-	cout << "OO" << endl;
+	if (chdir("..") < 0)
+	{
+		ftp_reply(psess->ctrl_fd, FTP_FILEFAIL, "Failed to change directory.");
+		return;
+	}
+	ftp_reply(psess->ctrl_fd, FTP_CWDOK, "Directory successfully changed.");
 }
 static void do_quit(session_t* psess)
 {
@@ -202,11 +212,34 @@ static void do_pwd(session_t* psess)
 }
 static void do_mkd(session_t* psess)
 {
-	cout << "OO" << endl;
+	if (mkdir(psess->arg, 0777) < 0)//创建目录(文件夹),权限为0777&umask
+	{
+		ftp_reply(psess->ctrl_fd, FTP_FILEFAIL, "Create directory operation failed.");
+		return;
+	}
+	char text[4096+1] = {0};//返回文本内容
+	if (psess->arg[0] == '/')//绝对路径
+	{
+		sprintf(text, "%s created.", psess->arg);
+	}
+	else//相对路径
+	{
+		char dir[4096+1] = {0};
+		getcwd(dir, 4097);//获得当前路径
+		if (dir[strlen(dir)-1] == '/')//有后缀
+		{
+			sprintf(text, "%s%s created.", dir, psess->arg);
+		}
+		else//无后缀
+		{
+			sprintf(text, "%s/%s created.", dir, psess->arg);
+		}
+	}
+	ftp_reply(psess->ctrl_fd, FTP_MKDIROK, text);
 }
-static void do_rmd(session_t* psess)
+static void do_rmd(session_t* psess)//删除路径(文件夹)
 {
-	cout << "OO" << endl;
+
 }
 static void do_dele(session_t* psess)
 {
