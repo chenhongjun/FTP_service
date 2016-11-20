@@ -194,9 +194,12 @@ static void do_nlst(session_t* psess)
 	psess->data_fd = -1;
 	ftp_reply(psess->ctrl_fd, FTP_TRANSFEROK, "Directory send OK.");
 }
-static void do_rest(session_t* psess)
+static void do_rest(session_t* psess)//保存断点位置
 {
-	cout << "OO" << endl;
+	psess->restart_pos = str_to_longlong(psess->arg);//断点位置
+	char text[1024] = {0};
+	sprintf(text, "Restart position accepted (%lld).", psess->restart_pos);
+	ftp_reply(psess->ctrl_fd, FTP_RESTOK, text);
 }
 static void do_abor(session_t* psess)
 {
@@ -239,23 +242,63 @@ static void do_mkd(session_t* psess)
 }
 static void do_rmd(session_t* psess)//删除路径(文件夹)
 {
-
+	if (rmdir(psess->arg) < 0)
+	{
+		ftp_reply(psess->ctrl_fd, FTP_FILEFAIL, "Remove directory operation failed.");
+		return;
+	}
+	ftp_reply(psess->ctrl_fd, FTP_RMDIROK, "Remove directory operation successful.");
 }
-static void do_dele(session_t* psess)
+static void do_dele(session_t* psess)//删除文件
 {
-	cout << "OO" << endl;
+	if (unlink(psess->arg) < 0)
+	{
+		ftp_reply(psess->ctrl_fd, FTP_FILEFAIL, "Delete operation failed.");
+		return;
+	}
+	ftp_reply(psess->ctrl_fd, FTP_DELEOK, "Delete operation successful.");
 }
-static void do_rnfr(session_t* psess)
+static void do_rnfr(session_t* psess)//接收需要重命名的文件的原文件名
 {
-	cout << "OO" << endl;
+	psess->rnfr_name = (char*)malloc(strlen(psess->arg) + 1);
+	memset(psess->rnfr_name, 0, strlen(psess->arg) + 1);
+	strcpy(psess->rnfr_name, psess->arg);
+	ftp_reply(psess->ctrl_fd, FTP_RNFROK, "Ready for RNTO.");
 }
-static void do_rnto(session_t* psess)
+static void do_rnto(session_t* psess)//接收需要重命名的文件的新名称
 {
-	cout << "OO" << endl;
+	if (psess->rnfr_name == NULL)
+	{
+		ftp_reply(psess->ctrl_fd, FTP_NEEDRNFR, "RNFR required first.");
+		return;
+	}
+	if (rename(psess->rnfr_name, psess->arg) < 0)
+	{
+		ftp_reply(psess->ctrl_fd, FTP_FILEFAIL, "Rename fail.");
+		free(psess->rnfr_name);
+		psess->rnfr_name = NULL;
+		return;
+	}
+	ftp_reply(psess->ctrl_fd, FTP_RENAMEOK, "Rename successful.");
+	free(psess->rnfr_name);
+	psess->rnfr_name = NULL;
 }
-static void do_site(session_t* psess)
+static void do_site(session_t* psess)//查看文件大小(不支持文件夹大小的查看)
 {
-	cout << "OO" << endl;
+	struct stat buf;
+	if (stat(psess->arg, &buf) < 0)
+	{
+		ftp_reply(psess->ctrl_fd, FTP_FILEFAIL, "SIZE operation failed.");
+		return;
+	}
+	if (!S_ISREG(buf.st_mode))
+	{
+		ftp_reply(psess->ctrl_fd, FTP_FILEFAIL, "Could not get file size.");
+		return;
+	}
+	char text[1024] = {0};
+	sprintf(text, "%lld", (long long)buf.st_size);
+	ftp_reply(psess->ctrl_fd, FTP_SIZEOK, text);
 }
 static void do_syst(session_t* psess)
 {

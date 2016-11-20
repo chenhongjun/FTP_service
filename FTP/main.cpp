@@ -40,7 +40,7 @@ int main()
 		//父子进程通信
 		-1, -1,
 		//FTP协议状态
-		0
+		0, 0, NULL
 	};
 
 	signal(SIGCHLD, SIG_IGN);//忽略僵尸进程状态的回收

@@ -18,6 +18,8 @@ typedef struct session {
 	int child_fd;//子进程使用的通信口
 	//FTP协议状态
 	int is_ascii;//目前的数据传输格式
+	long long restart_pos;//用于断点续传
+	char* rnfr_name;//需要重命名的文件的原名称
 } session_t;
 
 void begin_session(session_t* psess);
