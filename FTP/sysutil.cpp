@@ -402,3 +402,19 @@ int recv_fd(int sock_fd)//接收文件描述符
 
 	return recv_fd;
 }
+
+int lock_file_read(int fd)
+{
+	int ret;
+	struct flock the_lock;
+	memset(&the_lock, 0, sizeof(the_lock));
+	the_lock.l_type = F_RDLCK;//读锁
+	the_lock.l_whence = SEEK_SET;//加锁偏移方法
+	the_lock.l_start = 0;//加锁偏移量
+	the_lock.l_len = 0;//加锁字节数(0:加锁整个文件)
+
+	do {
+		ret = fcntl(fd, F_SETLKW, &the_lock);
+	} while (ret < 0 && errno == EINTR);
+	return ret;
+}

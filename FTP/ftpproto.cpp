@@ -158,7 +158,94 @@ static void do_mode(session_t* psess)
 }
 static void do_retr(session_t* psess)
 {
-	cout << "OO" << endl;
+	//下载文件
+	//断点续传
+	if (get_transfer_fd(psess) == 0)//获得数据传输通道
+	{
+		return;
+	}
+	
+	int fd = open(psess->arg, O_RDONLY);//打开文件
+	if (fd == -1)
+	{
+		ftp_reply(psess->ctrl_fd, FTP_FILEFAIL, "Failed to open file.");
+		return;
+	}
+	int ret;
+	//加读锁
+	ret = lock_file_read(fd);
+	if (ret == -1)
+	{
+		ftp_reply(psess->ctrl_fd, FTP_FILEFAIL, "Failed to open file.");
+		return;
+	}
+	//判断文件是否为普通文件
+	struct stat sbuf;
+	ret = fstat(fd, &sbuf);
+	if (!S_ISREG(sbuf.st_mode))
+	{
+		ftp_reply(psess->ctrl_fd, FTP_FILEFAIL, "Failed to open file.");
+		return;
+	}
+	//150应答
+	char text[4096] = {0};
+	if (psess->is_ascii)//ascii模式传输
+	{
+		sprintf(text, "Opening ASCII mode data connection for %s (%lld bytes).", psess->arg, (long long)sbuf.st_size);
+	}
+	else//二进制模式传输
+	{
+		sprintf(text, "Opening BINARY mode data connection for %s (%lld bytes).", psess->arg, (long long)sbuf.st_size);
+	}
+
+	ftp_reply(psess->ctrl_fd, FTP_DATACONN, text);
+
+	//下载文件
+	bzero(&text, 4096);
+	int flag;
+	while (1)
+	{
+		ret = read(fd, text, sizeof(text));
+		if (ret == -1)
+		{
+			if (errno == EINTR)
+			{
+				continue;
+			}
+			else
+			{
+				flag = 1;
+				break;
+			}
+		}
+		else if (ret == 0)
+		{
+			flag = 0;
+			break;
+		}
+		if (writen(psess->ctrl_fd, text, ret) != ret)
+		{
+			flag = 2;
+			break;
+		}
+	}
+	close(psess->data_fd);
+	psess->data_fd = -1;
+	if (flag == 0)
+	{
+		//传输完成226
+		ftp_reply(psess->ctrl_fd, FTP_TRANSFEROK, "Transfer complete.");
+	}
+	else if (flag == 1)
+	{//426
+		ftp_reply(psess->ctrl_fd, FTP_BADSENDFILE, "Failure reading from local file.");
+	}
+	else if (flag == 2)
+	{//451
+		ftp_reply(psess->ctrl_fd, FTP_BADSENDNET, "Failure writting to network stream.");
+	}
+
+
 }
 static void do_stor(session_t* psess)
 {
@@ -283,7 +370,7 @@ static void do_rnto(session_t* psess)//接收需要重命名的文件的新名�
 	free(psess->rnfr_name);
 	psess->rnfr_name = NULL;
 }
-static void do_site(session_t* psess)//查看文件大小(不支持文件夹大小的查看)
+static void do_size(session_t* psess)//查看文件大小(不支持文件夹大小的查看)
 {
 	struct stat buf;
 	if (stat(psess->arg, &buf) < 0)
@@ -317,7 +404,7 @@ static void do_feat(session_t* psess)
 	writen(psess->ctrl_fd, "UTF-8\r\n", strlen("UTF-8\r\n"));
 	ftp_reply(psess->ctrl_fd, FTP_FEAT, "End");
 }
-static void do_size(session_t* psess)
+static void do_site(session_t* psess)
 {
 	cout << "OO" << endl;
 }

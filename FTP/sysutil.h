@@ -25,4 +25,5 @@ int recv_fd(int sock_fd);//接收文件描述符
 
 int tcp_client(unsigned short port);//创建套接字并绑定指定端口号
 
+int lock_file_read(int fd);
 #endif/*_SYS_UTIL_H_*/
