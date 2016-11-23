@@ -165,6 +165,9 @@ static void do_retr(session_t* psess)
 		return;
 	}
 	
+	long long offset = psess->restart_pos;
+	psess->restart_pos = 0;
+
 	int fd = open(psess->arg, O_RDONLY);//打开文件
 	if (fd == -1)
 	{
@@ -187,6 +190,17 @@ static void do_retr(session_t* psess)
 		ftp_reply(psess->ctrl_fd, FTP_FILEFAIL, "Failed to open file.");
 		return;
 	}
+
+	if (offset != 0)
+	{
+		ret = lseek(fd, offset, SEEK_SET);
+		if (ret == -1)
+		{
+			ftp_reply(psess->ctrl_fd, FTP_FILEFAIL, "Failed to open file.");
+			return;
+		}
+	}
+
 	//150应答
 	char text[4096] = {0};
 	if (psess->is_ascii)//ascii模式传输
