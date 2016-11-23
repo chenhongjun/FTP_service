@@ -15,6 +15,7 @@
 #include <shadow.h>
 #include <dirent.h>
 #include <signal.h>
+#include <sys/sendfile.h>
 //#undef _POSIX_SOURCE
 #include <linux/capability.h>
 #include <sys/syscall.h>

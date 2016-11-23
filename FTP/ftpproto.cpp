@@ -202,7 +202,7 @@ static void do_retr(session_t* psess)
 	}
 
 	//150应答
-	char text[4096] = {0};
+	char text[1024] = {0};
 	if (psess->is_ascii)//ascii模式传输
 	{
 		sprintf(text, "Opening ASCII mode data connection for %s (%lld bytes).", psess->arg, (long long)sbuf.st_size);
@@ -215,9 +215,9 @@ static void do_retr(session_t* psess)
 	ftp_reply(psess->ctrl_fd, FTP_DATACONN, text);
 
 	//下载文件
-	bzero(&text, 4096);
+	
 	int flag;
-	while (1)
+	/*while (1)
 	{
 		ret = read(fd, text, sizeof(text));
 		if (ret == -1)
@@ -242,7 +242,33 @@ static void do_retr(session_t* psess)
 			flag = 2;
 			break;
 		}
+	}//*/
+	long long bytes_to_send = sbuf.st_size;
+	if (offset > bytes_to_send)
+	{
+		bytes_to_send = 0;
 	}
+	else
+	{
+		bytes_to_send -= offset;
+	}
+	while (bytes_to_send)
+	{
+		int num_this_time = bytes_to_send > 4096 ? 4096 : bytes_to_send;
+		ret = sendfile(psess->data_fd, fd, NULL, num_this_time);
+		if (ret == -1)
+		{
+			flag = 2;
+			break;
+		}
+		bytes_to_send -= ret;
+	}
+
+	if (bytes_to_send == 0)
+	{
+		flag = 0;
+	}
+
 	close(psess->data_fd);
 	psess->data_fd = -1;
 	if (flag == 0)
