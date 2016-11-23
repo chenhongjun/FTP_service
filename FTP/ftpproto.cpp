@@ -223,7 +223,7 @@ static void do_retr(session_t* psess)
 			flag = 0;
 			break;
 		}
-		if (writen(psess->ctrl_fd, text, ret) != ret)
+		if (writen(psess->data_fd, text, ret) != ret)
 		{
 			flag = 2;
 			break;
