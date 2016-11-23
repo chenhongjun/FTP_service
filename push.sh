@@ -6,5 +6,5 @@
 #########################################################################
 #!/bin/bash
 git add .
-git commit -m "shell script"
+git commit -m "$1"
 git push -u origin master
