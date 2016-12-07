@@ -13,6 +13,7 @@ int get_port_fd(session_t* psess);//向父进程接收套接字
 int get_pasv_fd(session_t* psess);//
 const char* statbuf_get_perms(struct stat* sbuf);//文件列表访问属性
 const char* statbuf_get_date(struct stat* sbuf);//文件列表时间属性
+void upload_common(session_t* psess, int is_append);//上传文件
 
 
 int list_common(session_t* psess, int detail);//文件列表
@@ -268,7 +269,8 @@ static void do_retr(session_t* psess)
 	{
 		flag = 0;
 	}
-
+	unlock_file(fd);
+	close(fd);
 	close(psess->data_fd);
 	psess->data_fd = -1;
 	if (flag == 0)
@@ -289,11 +291,11 @@ static void do_retr(session_t* psess)
 }
 static void do_stor(session_t* psess)
 {
-	cout << "OO" << endl;
+	upload_common(psess, 0);
 }
 static void do_appe(session_t* psess)
 {
-	cout << "OO" << endl;
+	upload_common(psess, 1);
 }
 static void do_list(session_t* psess)
 {
@@ -817,4 +819,69 @@ const char* statbuf_get_date(struct stat* sbuf)//文件列表时间属性
 		struct tm* p_tm = localtime(&sbuf->st_mtime);
 		strftime(datebuf, sizeof(datebuf), p_date_format, p_tm);
 		return datebuf;
+}
+
+void upload_common(session_t* psess, int is_append)
+{
+	if (get_transfer_fd(psess) == 0)//打开data端口
+	{
+		return;
+	}
+	long long offset = psess->restart_pos;
+	psess->restart_pos = 0;
+
+	int fd = open(psess->arg, O_CREAT | O_WRONLY, 0666);//打开文件
+	if (fd == -1)
+	{
+		ftp_reply(psess->ctrl_fd, FTP_UPLOADFAIL, "Could not create file.");
+		return;
+	}
+	//加写锁
+	int ret = lock_file_write(fd);
+	if (ret == -1)
+	{
+		ftp_reply(psess->ctrl_fd, FTP_UPLOADFAIL, "Could not create file.");
+		return;
+	}
+	
+	if (!is_append && offset == 0)//STOR
+	{
+		ftruncate(fd, 0);//截断文件
+		if (lseek(fd, 0, SEEK_SET) < 0)
+		{
+			ftp_reply(psess->ctrl_fd, FTP_UPLOADFAIL, "Could not create file.");
+			return;
+		}
+	}
+	else if (!is_append && offset != 0)//REST+STOR
+	{
+		if (lseek(fd, offset, SEEK_SET) < 0)
+		{
+			ftp_reply(psess->ctrl_fd, FTP_UPLOADFAIL, "Could not create file.");
+			return;
+		}
+	}
+	else if (is_append)//APPE
+	{
+		if (lseek(fd, 0, SEEK_END) < 0)
+		{
+			ftp_reply(psess->ctrl_fd, FTP_UPLOADFAIL, "Could not create file.");
+			return;
+		}
+	}
+
+	struct stat sbuf;
+	ret = fstat(fd, &sbuf);
+
+	char text[1024] = {0};
+	if (psess->is_ascii)
+	{
+		sprintf(text, "Opening ASCII mode data connection for %s (%lld bytes).", psess->arg, (long long)sbuf.st_size);
+	}
+	else
+	{
+		sprintf(text, "Opening BINARY mode data connection for %s (%lld bytes).", psess->arg, (long long)sbuf.st_size);
+	}
+	ftp_reply(psess->ctrl_fd, FTP_DATACONN, text);
+
 }
